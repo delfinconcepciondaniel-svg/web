@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 
+import 'api_servicio.dart';
 import 'models.dart';
 
 class Indicadores {
@@ -38,6 +39,8 @@ class Repositorio extends ChangeNotifier {
   final List<Pago> pagos = [];
 
   Rol rolActual = Rol.administrador;
+  bool conectado = false;
+  String? errorConexion;
 
   void _inicializar() {
     clientes.addAll([
@@ -239,6 +242,117 @@ class Repositorio extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> cargarDesdeApi() async {
+    try {
+      final datos = await ApiServicio.cargarDatos();
+      clientes
+        ..clear()
+        ..addAll((datos['clientes'] as List? ?? []).map((e) => clienteDeJson(e as Map<String, dynamic>)));
+      empleados
+        ..clear()
+        ..addAll((datos['empleados'] as List? ?? []).map((e) => empleadoDeJson(e as Map<String, dynamic>)));
+      repartidores
+        ..clear()
+        ..addAll((datos['repartidores'] as List? ?? []).map((e) => repartidorDeJson(e as Map<String, dynamic>)));
+      rutas
+        ..clear()
+        ..addAll((datos['rutas'] as List? ?? []).map((e) => rutaDeJson(e as Map<String, dynamic>)));
+      envios
+        ..clear()
+        ..addAll((datos['envios'] as List? ?? []).map((e) => envioDeJson(e as Map<String, dynamic>)));
+      paquetes
+        ..clear()
+        ..addAll((datos['paquetes'] as List? ?? []).map((e) => paqueteDeJson(e as Map<String, dynamic>)));
+      pagos
+        ..clear()
+        ..addAll((datos['pagos'] as List? ?? []).map((e) => pagoDeJson(e as Map<String, dynamic>)));
+      conectado = true;
+      errorConexion = null;
+    } catch (e) {
+      conectado = false;
+      errorConexion = e.toString();
+    }
+    notifyListeners();
+  }
+
+  void _sync(Future<void> Function() accion) {
+    accion().then((_) {
+      if (!conectado) {
+        conectado = true;
+        errorConexion = null;
+        notifyListeners();
+      }
+    }).catchError((Object e) {
+      conectado = false;
+      errorConexion = e.toString();
+      notifyListeners();
+    });
+  }
+
+  Cliente clienteDeJson(Map<String, dynamic> j) => Cliente(
+        id: j['id'] as String,
+        nombre: j['nombre'] as String,
+        documento: j['documento'] as String,
+        telefono: j['telefono'] as String,
+        correo: j['correo'] as String,
+        direccion: j['direccion'] as String,
+      );
+
+  Empleado empleadoDeJson(Map<String, dynamic> j) => Empleado(
+        id: j['id'] as String,
+        nombre: j['nombre'] as String,
+        cargo: j['cargo'] as String,
+        correo: j['correo'] as String,
+        telefono: j['telefono'] as String,
+      );
+
+  Repartidor repartidorDeJson(Map<String, dynamic> j) => Repartidor(
+        id: j['id'] as String,
+        nombre: j['nombre'] as String,
+        telefono: j['telefono'] as String,
+        disponible: j['disponible'] == 1 || j['disponible'] == true,
+      );
+
+  Ruta rutaDeJson(Map<String, dynamic> j) => Ruta(
+        id: j['id'] as String,
+        zona: j['zona'] as String,
+        fecha: DateTime.parse(j['fecha'] as String),
+        descripcion: j['descripcion'] as String,
+        repartidorId: j['repartidorId'] as String?,
+      );
+
+  Envio envioDeJson(Map<String, dynamic> j) => Envio(
+        id: j['id'] as String,
+        clienteId: j['clienteId'] as String,
+        origen: j['origen'] as String,
+        destino: j['destino'] as String,
+        fecha: DateTime.parse(j['fecha'] as String),
+        tarifa: (j['tarifa'] as num).toDouble(),
+        estado: EstadoEnvio.values.firstWhere((e) => e.label == j['estado']),
+        empleadoId: j['empleadoId'] as String,
+        rutaId: j['rutaId'] as String?,
+        repartidorId: j['repartidorId'] as String?,
+        confirmacion: j['confirmacion'] as String?,
+      );
+
+  Paquete paqueteDeJson(Map<String, dynamic> j) => Paquete(
+        id: j['id'] as String,
+        envioId: j['envioId'] as String,
+        descripcion: j['descripcion'] as String,
+        peso: (j['peso'] as num).toDouble(),
+        dimensiones: j['dimensiones'] as String,
+        valorDeclarado: (j['valorDeclarado'] as num).toDouble(),
+      );
+
+  Pago pagoDeJson(Map<String, dynamic> j) => Pago(
+        id: j['id'] as String,
+        envioId: j['envioId'] as String,
+        importe: (j['importe'] as num).toDouble(),
+        metodo: j['metodo'] as String,
+        estado: EstadoPago.values.firstWhere((e) => e.label == j['estado']),
+        fecha: DateTime.parse(j['fecha'] as String),
+      );
+
   Cliente? cliente(String id) {
     for (final c in clientes) {
       if (c.id == id) return c;
@@ -310,6 +424,14 @@ class Repositorio extends ChangeNotifier {
   void agregarCliente(Cliente cliente) {
     clientes.add(cliente);
     notifyListeners();
+    _sync(() => ApiServicio.post('clientes', {
+          'id': cliente.id,
+          'nombre': cliente.nombre,
+          'documento': cliente.documento,
+          'telefono': cliente.telefono,
+          'correo': cliente.correo,
+          'direccion': cliente.direccion,
+        }));
   }
 
   void actualizarCliente(Cliente cliente, {required String nombre, required String documento, required String telefono, required String correo, required String direccion}) {
@@ -320,6 +442,13 @@ class Repositorio extends ChangeNotifier {
       ..correo = correo
       ..direccion = direccion;
     notifyListeners();
+    _sync(() => ApiServicio.put('clientes', cliente.id, {
+          'nombre': nombre,
+          'documento': documento,
+          'telefono': telefono,
+          'correo': correo,
+          'direccion': direccion,
+        }));
   }
 
   String nuevoClienteId() => _siguienteId('C', clientes.map((c) => c.id).toList());
@@ -327,6 +456,13 @@ class Repositorio extends ChangeNotifier {
   void agregarEmpleado(Empleado empleado) {
     empleados.add(empleado);
     notifyListeners();
+    _sync(() => ApiServicio.post('empleados', {
+          'id': empleado.id,
+          'nombre': empleado.nombre,
+          'cargo': empleado.cargo,
+          'correo': empleado.correo,
+          'telefono': empleado.telefono,
+        }));
   }
 
   void actualizarEmpleado(Empleado empleado, {required String nombre, required String cargo, required String correo, required String telefono}) {
@@ -336,6 +472,12 @@ class Repositorio extends ChangeNotifier {
       ..correo = correo
       ..telefono = telefono;
     notifyListeners();
+    _sync(() => ApiServicio.put('empleados', empleado.id, {
+          'nombre': nombre,
+          'cargo': cargo,
+          'correo': correo,
+          'telefono': telefono,
+        }));
   }
 
   String nuevoEmpleadoId() => _siguienteId('E', empleados.map((e) => e.id).toList());
@@ -343,6 +485,12 @@ class Repositorio extends ChangeNotifier {
   void agregarRepartidor(Repartidor repartidor) {
     repartidores.add(repartidor);
     notifyListeners();
+    _sync(() => ApiServicio.post('repartidores', {
+          'id': repartidor.id,
+          'nombre': repartidor.nombre,
+          'telefono': repartidor.telefono,
+          'disponible': repartidor.disponible,
+        }));
   }
 
   void actualizarRepartidor(Repartidor repartidor, {required String nombre, required String telefono, required bool disponible}) {
@@ -351,6 +499,11 @@ class Repositorio extends ChangeNotifier {
       ..telefono = telefono
       ..disponible = disponible;
     notifyListeners();
+    _sync(() => ApiServicio.put('repartidores', repartidor.id, {
+          'nombre': nombre,
+          'telefono': telefono,
+          'disponible': disponible,
+        }));
   }
 
   String nuevoRepartidorId() => _siguienteId('RP', repartidores.map((r) => r.id).toList());
@@ -358,6 +511,13 @@ class Repositorio extends ChangeNotifier {
   void agregarRuta(Ruta ruta) {
     rutas.add(ruta);
     notifyListeners();
+    _sync(() => ApiServicio.post('rutas', {
+          'id': ruta.id,
+          'zona': ruta.zona,
+          'fecha': ruta.fecha.toIso8601String().substring(0, 10),
+          'descripcion': ruta.descripcion,
+          'repartidorId': ruta.repartidorId,
+        }));
   }
 
   void actualizarRuta(Ruta ruta, {required String zona, required DateTime fecha, required String descripcion, String? repartidorId}) {
@@ -367,6 +527,12 @@ class Repositorio extends ChangeNotifier {
       ..descripcion = descripcion
       ..repartidorId = repartidorId;
     notifyListeners();
+    _sync(() => ApiServicio.put('rutas', ruta.id, {
+          'zona': zona,
+          'fecha': fecha.toIso8601String().substring(0, 10),
+          'descripcion': descripcion,
+          'repartidorId': repartidorId,
+        }));
   }
 
   String nuevoRutaId() => _siguienteId('R', rutas.map((r) => r.id).toList());
@@ -375,6 +541,22 @@ class Repositorio extends ChangeNotifier {
     envios.add(envio);
     paquetes.add(paquete);
     notifyListeners();
+    _sync(() => ApiServicio.post('envios', {
+          'id': envio.id,
+          'clienteId': envio.clienteId,
+          'origen': envio.origen,
+          'destino': envio.destino,
+          'fecha': envio.fecha.toIso8601String(),
+          'tarifa': envio.tarifa,
+          'empleadoId': envio.empleadoId,
+          'paquete': {
+            'id': paquete.id,
+            'descripcion': paquete.descripcion,
+            'peso': paquete.peso,
+            'dimensiones': paquete.dimensiones,
+            'valorDeclarado': paquete.valorDeclarado,
+          },
+        }));
   }
 
   void actualizarEnvio(Envio envio, {required String clienteId, required String origen, required String destino, required DateTime fecha, required double tarifa, required String empleadoId}) {
@@ -386,6 +568,14 @@ class Repositorio extends ChangeNotifier {
       ..tarifa = tarifa
       ..empleadoId = empleadoId;
     notifyListeners();
+    _sync(() => ApiServicio.put('envios', envio.id, {
+          'clienteId': clienteId,
+          'origen': origen,
+          'destino': destino,
+          'fecha': fecha.toIso8601String(),
+          'tarifa': tarifa,
+          'empleadoId': empleadoId,
+        }));
   }
 
   String nuevoEnvioId() {
@@ -401,6 +591,14 @@ class Repositorio extends ChangeNotifier {
   void agregarPaquete(Paquete paquete) {
     paquetes.add(paquete);
     notifyListeners();
+    _sync(() => ApiServicio.post('paquetes', {
+          'id': paquete.id,
+          'envioId': paquete.envioId,
+          'descripcion': paquete.descripcion,
+          'peso': paquete.peso,
+          'dimensiones': paquete.dimensiones,
+          'valorDeclarado': paquete.valorDeclarado,
+        }));
   }
 
   void actualizarPaquete(Paquete paquete, {required String descripcion, required double peso, required String dimensiones, required double valorDeclarado}) {
@@ -410,11 +608,25 @@ class Repositorio extends ChangeNotifier {
       ..dimensiones = dimensiones
       ..valorDeclarado = valorDeclarado;
     notifyListeners();
+    _sync(() => ApiServicio.put('paquetes', paquete.id, {
+          'descripcion': descripcion,
+          'peso': peso,
+          'dimensiones': dimensiones,
+          'valorDeclarado': valorDeclarado,
+        }));
   }
 
   void agregarPago(Pago pago) {
     pagos.add(pago);
     notifyListeners();
+    _sync(() => ApiServicio.post('pagos', {
+          'id': pago.id,
+          'envioId': pago.envioId,
+          'importe': pago.importe,
+          'metodo': pago.metodo,
+          'estado': pago.estado.label,
+          'fecha': pago.fecha.toIso8601String().substring(0, 10),
+        }));
   }
 
   void actualizarPago(Pago pago, {required double importe, required String metodo, required EstadoPago estado}) {
@@ -423,6 +635,13 @@ class Repositorio extends ChangeNotifier {
       ..metodo = metodo
       ..estado = estado;
     notifyListeners();
+    _sync(() => ApiServicio.put('pagos', pago.id, {
+          'envioId': pago.envioId,
+          'importe': importe,
+          'metodo': metodo,
+          'estado': estado.label,
+          'fecha': pago.fecha.toIso8601String().substring(0, 10),
+        }));
   }
 
   String nuevoPagoId() => _siguienteId('PG', pagos.map((p) => p.id).toList());
@@ -436,6 +655,10 @@ class Repositorio extends ChangeNotifier {
       envio.confirmacion ??= 'Entrega confirmada';
     }
     notifyListeners();
+    _sync(() => ApiServicio.patch('envios', envio.id, 'estado', {
+          'estado': estado.label,
+          'confirmacion': envio.confirmacion,
+        }));
     return null;
   }
 
@@ -443,5 +666,9 @@ class Repositorio extends ChangeNotifier {
     envio.rutaId = rutaId;
     envio.repartidorId = repartidorId;
     notifyListeners();
+    _sync(() => ApiServicio.patch('envios', envio.id, 'asignacion', {
+          'rutaId': rutaId,
+          'repartidorId': repartidorId,
+        }));
   }
 }

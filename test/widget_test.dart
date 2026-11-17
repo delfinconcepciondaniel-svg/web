@@ -1,11 +1,12 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:flutter_application_1/main.dart';
+import 'package:flutter_application_1/repositorio.dart';
 
 void main() {
   testWidgets('RutaExpress dashboard renders', (WidgetTester tester) async {
-    await tester.pumpWidget(const RutaExpressApp());
+    await tester.pumpWidget(RutaExpressApp(repositorio: Repositorio()));
     await tester.pumpAndSettle();
 
     expect(find.text('Bienvenido, Administrador'), findsOneWidget);
@@ -18,7 +19,7 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
 
-    await tester.pumpWidget(const RutaExpressApp());
+    await tester.pumpWidget(RutaExpressApp(repositorio: Repositorio()));
     await tester.pumpAndSettle();
 
     for (final modulo in ['Envíos', 'Paquetes', 'Rutas', 'Repartidores', 'Pagos', 'Clientes', 'Empleados', 'Reportes', 'Panel de control']) {

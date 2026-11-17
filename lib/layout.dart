@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
 import 'comunes.dart';
 import 'models.dart';
@@ -111,7 +111,7 @@ class _AppShellState extends State<AppShell> {
           ? Drawer(
               width: 250,
               backgroundColor: AppColores.sidebar,
-              child: _Menu(seccion: _seccion, irA: irA),
+              child: _Menu(seccion: _seccion, irA: irA, repositorio: widget.repositorio),
             )
           : null,
       body: Row(
@@ -119,7 +119,7 @@ class _AppShellState extends State<AppShell> {
           if (!compacto)
             SizedBox(
               width: 250,
-              child: _Menu(seccion: _seccion, irA: irA),
+              child: _Menu(seccion: _seccion, irA: irA, repositorio: widget.repositorio),
             ),
           Expanded(
             child: Column(
@@ -147,10 +147,11 @@ class _AppShellState extends State<AppShell> {
 }
 
 class _Menu extends StatelessWidget {
-  const _Menu({required this.seccion, required this.irA});
+  const _Menu({required this.seccion, required this.irA, required this.repositorio});
 
   final Seccion seccion;
   final void Function(Seccion) irA;
+  final Repositorio repositorio;
 
   @override
   Widget build(BuildContext context) {
@@ -219,14 +220,27 @@ class _Menu extends StatelessWidget {
               margin: const EdgeInsets.all(14),
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(color: const Color(0xFF182747), borderRadius: BorderRadius.circular(12)),
-              child: const Row(
-                children: [
-                  Icon(Icons.info_outline, color: AppColores.accent, size: 18),
-                  SizedBox(width: 10),
-                  Expanded(
-                    child: Text('Sistema de gestión integral v1.0', style: TextStyle(color: Color(0xFFB9C8E0), fontSize: 11)),
-                  ),
-                ],
+              child: ListenableBuilder(
+                listenable: repositorio,
+                builder: (context, _) {
+                  final conectado = repositorio.conectado;
+                  final color = conectado ? AppColores.verde : AppColores.rojo;
+                  return Tooltip(
+                    message: conectado ? 'Conectado a MySQL/MariaDB' : (repositorio.errorConexion ?? 'Sin conexión con la base de datos'),
+                    child: Row(
+                      children: [
+                        Icon(conectado ? Icons.cloud_done_outlined : Icons.cloud_off_outlined, color: color, size: 18),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            conectado ? 'BD conectada · v1.0' : 'BD desconectada',
+                            style: TextStyle(color: conectado ? const Color(0xFFB9C8E0) : color, fontSize: 11),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
               ),
             ),
           ],
@@ -346,3 +360,4 @@ class _BarraSuperior extends StatelessWidget {
     );
   }
 }
+
